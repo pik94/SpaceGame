@@ -1,5 +1,4 @@
 import curses
-import time
 
 import asyncio
 
@@ -21,14 +20,20 @@ async def blink(canvas, row=5, column=10, symbol='*'):
 
 def draw(canvas):
     curses.curs_set(False)
-    row, column = (5, 20)
     canvas.border()
-    coroutine = blink(canvas, row, column)
 
-    for _ in range(0, 20):
-        coroutine.send(None)
-        canvas.refresh()
-    time.sleep(5)
+    coroutines = [
+        blink(canvas, 1, col)
+        for col in range(1, 11, 2)
+    ]
+
+    while True:
+        for coroutine in coroutines.copy():
+            try:
+                coroutine.send(None)
+                canvas.refresh()
+            except StopIteration:
+                coroutines.remove(coroutine)
 
 
 if __name__ == '__main__':
