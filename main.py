@@ -12,8 +12,10 @@ N_SAMPLES = 100
 BLINK_TIMES = 100
 
 
-async def sleep(seconds: Union[float, int]):
-    for _ in range(0, int(seconds * 10)):
+async def sleep(seconds: Union[float, int] = 0):
+    if not seconds:
+        seconds = random.randint(1, 10)
+    for _ in range(0, seconds):
         await asyncio.sleep(0)
 
 
@@ -24,16 +26,16 @@ async def blink(canvas,
                 symbol: Optional[str] = '*'):
     for _ in range(0, times):
         canvas.addstr(row, column, symbol, curses.A_DIM)
-        await sleep(2)
+        await sleep()
 
         canvas.addstr(row, column, symbol)
-        await sleep(0.3)
+        await sleep()
 
         canvas.addstr(row, column, symbol, curses.A_BOLD)
-        await sleep(0.5)
+        await sleep()
 
         canvas.addstr(row, column, symbol)
-        await sleep(0.3)
+        await sleep()
 
 
 def draw(canvas):
