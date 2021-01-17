@@ -151,15 +151,19 @@ async def animate_spaceship(canvas,
                             frames: Dict[str, str],
                             start_row: int,
                             start_col: int):
+    row, col = start_row, start_col
     while True:
-        draw_frame(canvas, start_row, start_col, frames['rocket_frame_1'])
+        draw_frame(canvas, row, col, frames['rocket_frame_1'])
         await sleep(1)
-        draw_frame(canvas, start_row, start_col, frames['rocket_frame_1'],
-                   negative=True)
-        draw_frame(canvas, start_row, start_col, frames['rocket_frame_2'])
+        draw_frame(canvas, row, col, frames['rocket_frame_1'], negative=True)
+        draw_frame(canvas, row, col, frames['rocket_frame_2'])
         await sleep(1)
-        draw_frame(canvas, start_row, start_col, frames['rocket_frame_2'],
-                   negative=True)
+        draw_frame(canvas, row, col, frames['rocket_frame_2'], negative=True)
+
+        rows_direction, columns_direction, space_pressed = \
+            read_controls(canvas)
+        row += rows_direction
+        col += columns_direction
 
 
 async def sleep(seconds: Union[float, int] = 0):
@@ -190,7 +194,9 @@ async def blink(canvas,
 
 def draw(canvas):
     curses.curs_set(False)
+
     canvas.border()
+    canvas.nodelay(True)
 
     y_max, x_max = canvas.getmaxyx()
     y_max -= 2
