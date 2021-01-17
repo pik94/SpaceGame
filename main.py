@@ -1,18 +1,27 @@
 import curses
+import random
 import time
+from typing import Optional, Union
 
 import asyncio
 
 
 TIC_TIMEOUT = 0.1
+STARS = ['+', '*', '.', ':']
+N_SAMPLES = 100
+BLINK_TIMES = 100
 
 
-async def sleep(seconds):
+async def sleep(seconds: Union[float, int]):
     for _ in range(0, int(seconds * 10)):
         await asyncio.sleep(0)
 
 
-async def blink(canvas, row=5, column=10, times=3, symbol='*'):
+async def blink(canvas,
+                row: int,
+                column: int,
+                times: Optional[int] = BLINK_TIMES,
+                symbol: Optional[str] = '*'):
     for _ in range(0, times):
         canvas.addstr(row, column, symbol, curses.A_DIM)
         await sleep(2)
@@ -31,10 +40,25 @@ def draw(canvas):
     curses.curs_set(False)
     canvas.border()
 
-    coroutines = [
-        blink(canvas, 1, col, times=10)
-        for col in range(1, 11, 2)
-    ]
+    y_max, x_max = canvas.getmaxyx()
+    y_max -= 2
+    x_max -= 2
+
+    n_samples = N_SAMPLES
+    while n_samples > y_max*x_max:
+        n_samples = n_samples // 2
+
+    coroutines = {}
+    for _ in range(0, n_samples):
+        x = random.randint(1, x_max)
+        y = random.randint(1, y_max)
+        if (x, y) in coroutines:
+            continue
+
+        coroutines[(x, y)] = blink(canvas, row=y, column=x, times=10,
+                                   symbol=random.choice(STARS))
+
+    coroutines = list(coroutines.values())
     while True:
         for coroutine in coroutines.copy():
             try:
@@ -44,6 +68,7 @@ def draw(canvas):
                 coroutines.remove(coroutine)
         if not coroutines:
             break
+
         time.sleep(TIC_TIMEOUT)
 
 
