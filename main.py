@@ -1,25 +1,34 @@
 import curses
 import time
 
+import asyncio
 
-def twinkle(canvas, row=5, column=20, pause=2, flag=None):
-    if flag:
-        canvas.addstr(row, column, '*', flag)
-    else:
-        canvas.addstr(row, column, '*')
-    canvas.refresh()
-    time.sleep(pause)
+
+async def blink(canvas, row=5, column=10, symbol='*'):
+    while True:
+        canvas.addstr(row, column, symbol, curses.A_DIM)
+        await asyncio.sleep(0)
+
+        canvas.addstr(row, column, symbol)
+        await asyncio.sleep(0)
+
+        canvas.addstr(row, column, symbol, curses.A_BOLD)
+        await asyncio.sleep(0)
+
+        canvas.addstr(row, column, symbol)
+        await asyncio.sleep(0)
 
 
 def draw(canvas):
     curses.curs_set(False)
     row, column = (5, 20)
     canvas.border()
-    while True:
-        twinkle(canvas, row, column, pause=2, flag=curses.A_DIM)
-        twinkle(canvas, row, column, pause=0.3)
-        twinkle(canvas, row, column, pause=0.5, flag=curses.A_BOLD)
-        twinkle(canvas, row, columnpause=0.3)
+    coroutine = blink(canvas, row, column)
+
+    for _ in range(0, 20):
+        coroutine.send(None)
+        canvas.refresh()
+    time.sleep(5)
 
 
 if __name__ == '__main__':
