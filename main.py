@@ -7,19 +7,24 @@ import asyncio
 TIC_TIMEOUT = 0.1
 
 
+async def sleep(seconds):
+    for _ in range(0, int(seconds * 10)):
+        await asyncio.sleep(0)
+
+
 async def blink(canvas, row=5, column=10, times=3, symbol='*'):
     for _ in range(0, times):
         canvas.addstr(row, column, symbol, curses.A_DIM)
-        await asyncio.sleep(0)
+        await sleep(2)
 
         canvas.addstr(row, column, symbol)
-        await asyncio.sleep(0)
+        await sleep(0.3)
 
         canvas.addstr(row, column, symbol, curses.A_BOLD)
-        await asyncio.sleep(0)
+        await sleep(0.5)
 
         canvas.addstr(row, column, symbol)
-        await asyncio.sleep(0)
+        await sleep(0.3)
 
 
 def draw(canvas):
@@ -27,7 +32,7 @@ def draw(canvas):
     canvas.border()
 
     coroutines = [
-        blink(canvas, 1, col, times=col)
+        blink(canvas, 1, col, times=10)
         for col in range(1, 11, 2)
     ]
     while True:
