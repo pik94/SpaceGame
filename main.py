@@ -9,8 +9,6 @@ import asyncio
 
 TIC_TIMEOUT = 0.1
 STARS = ['+', '*', '.', ':']
-N_SAMPLES = 100
-BLINK_TIMES = 100
 
 SPACE_KEY_CODE = 32
 LEFT_KEY_CODE = 260
@@ -65,7 +63,11 @@ def read_controls(canvas) -> Tuple[int, int, bool]:
     return rows_direction, columns_direction, space_pressed
 
 
-def draw_frame(canvas, start_row, start_column, text, negative=False):
+def draw_frame(canvas,
+               start_row: int,
+               start_column: int,
+               text: str,
+               negative: Optional[bool] = False):
     """
     Draw multiline text fragment on canvas,
     erase text instead of drawing if negative=True is specified.
@@ -101,10 +103,11 @@ def draw_frame(canvas, start_row, start_column, text, negative=False):
             canvas.addch(row, column, symbol)
 
 
-def get_frame_size(text):
+def get_frame_size(text: str) -> Tuple[int, int]:
     """
     Calculate size of multiline text fragment, return pair — number
     of rows and columns.
+    :returns: a row and a column sizes
     """
 
     lines = text.splitlines()
@@ -150,8 +153,25 @@ async def fire(canvas,
 async def animate_spaceship(canvas,
                             frames: Dict[str, str],
                             start_row: int,
-                            start_col: int):
-    row, col = start_row, start_col
+                            start_column: int,
+                            row_speed: Optional[int] = 1,
+                            column_speed: Optional[int] = 1):
+    """
+    A coroutine for drawing and moving the spaceship.
+    :param canvas:
+    :param frames: a dict with all frames for the game
+    :param start_row: a start row point for the spaceship
+    :param start_column: a start column point for the spaceship
+    :param row_speed: row's speed
+    :param column_speed: column's speed
+    :return:
+    """
+
+    row, col = start_row, start_column
+    row_size, col_size = get_frame_size(frames['rocket_frame_1'])
+    y_max, x_max = canvas.getmaxyx()
+    y_max, x_max = y_max - 1, x_max - 1
+
     while True:
         draw_frame(canvas, row, col, frames['rocket_frame_1'])
         await sleep(1)
@@ -160,10 +180,23 @@ async def animate_spaceship(canvas,
         await sleep(1)
         draw_frame(canvas, row, col, frames['rocket_frame_2'], negative=True)
 
-        rows_direction, columns_direction, space_pressed = \
-            read_controls(canvas)
-        row += rows_direction
-        col += columns_direction
+        rows_direction, cols_direction, space_pressed = read_controls(canvas)
+        rows_direction *= row_speed
+        cols_direction *= column_speed
+
+        if row + rows_direction <= 0:
+            row = 1
+        elif row + rows_direction + row_size > y_max:
+            row = y_max - row_size
+        else:
+            row += rows_direction
+
+        if col + cols_direction <= 0:
+            col = 1
+        elif col + cols_direction + col_size >= x_max:
+            col = x_max - col_size
+        else:
+            col += cols_direction
 
 
 async def sleep(seconds: Union[float, int] = 0):
@@ -176,9 +209,11 @@ async def sleep(seconds: Union[float, int] = 0):
 async def blink(canvas,
                 row: int,
                 column: int,
-                times: Optional[int] = BLINK_TIMES,
                 symbol: Optional[str] = '*'):
-    for _ in range(0, times):
+    """
+    Draw a blinking symbol.
+    """
+    while True:
         canvas.addstr(row, column, symbol, curses.A_DIM)
         await sleep()
 
@@ -192,7 +227,7 @@ async def blink(canvas,
         await sleep()
 
 
-def draw(canvas):
+def run_event_loop(canvas):
     curses.curs_set(False)
 
     canvas.border()
@@ -202,26 +237,31 @@ def draw(canvas):
     y_max -= 2
     x_max -= 2
 
-    n_samples = N_SAMPLES
-    while n_samples > y_max*x_max:
-        n_samples = n_samples // 2
-
     frames = read_frames()
 
+    n_stars = (y_max*x_max) // 4
     coroutines = {}
-    for _ in range(0, n_samples):
+    for _ in range(0, n_stars):
         x = random.randint(1, x_max)
         y = random.randint(1, y_max)
         if (x, y) in coroutines:
             continue
 
-        coroutines[(x, y)] = blink(canvas, row=y, column=x, times=10,
+        coroutines[(x, y)] = blink(canvas,
+                                   row=y,
+                                   column=x,
                                    symbol=random.choice(STARS))
 
     coroutines = list(coroutines.values())
-    coroutines.append(fire(canvas, y_max, x_max // 2))
-    coroutines.append(animate_spaceship(canvas, frames, y_max // 2,
-                                        x_max // 2))
+    # coroutines.append(fire(canvas,
+    #                        start_row=y_max,
+    #                        start_column=x_max // 2))
+    coroutines.append(animate_spaceship(canvas,
+                                        frames=frames,
+                                        start_row=y_max // 2,
+                                        start_column=x_max // 2,
+                                        row_speed=2,
+                                        column_speed=2))
     while True:
         for coroutine in coroutines.copy():
             try:
@@ -237,4 +277,4 @@ def draw(canvas):
 
 if __name__ == '__main__':
     curses.update_lines_cols()
-    curses.wrapper(draw)
+    curses.wrapper(run_event_loop)
