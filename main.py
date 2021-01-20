@@ -8,7 +8,7 @@ from typing import Dict, Optional, Tuple, Union
 
 
 TIC_TIMEOUT = 0.1
-STARS = ['+', '*', '.', ':']
+STAR_SET = ['+', '*', '.', ':']
 
 SPACE_KEY_CODE = 32
 LEFT_KEY_CODE = 260
@@ -173,10 +173,10 @@ async def animate_spaceship(canvas,
 
     row, col = start_row, start_column
     frame_row_size, frame_col_size = get_frame_size(frames['rocket_frame_1'])
-    window_height, window_width = canvas.getmaxyx()
+    max_row, max_column = canvas.getmaxyx()
     # Compute correct window sizes including borders
-    window_height -= 1
-    window_width -= 1
+    max_row -= 1
+    max_column -= 1
     spaceship_frames = [frames['rocket_frame_1'], frames['rocket_frame_2']]
     for frame in itertools.cycle(spaceship_frames):
         draw_frame(canvas, row, col, frame)
@@ -189,15 +189,15 @@ async def animate_spaceship(canvas,
 
         if row + rows_direction <= 0:
             row = 1
-        elif row + rows_direction + frame_row_size > window_height:
-            row = window_height - frame_row_size
+        elif row + rows_direction + frame_row_size > max_row:
+            row = max_row - frame_row_size
         else:
             row += rows_direction
 
         if col + cols_direction <= 0:
             col = 1
-        elif col + cols_direction + frame_col_size >= window_width:
-            col = window_width - frame_col_size
+        elif col + cols_direction + frame_col_size >= max_column:
+            col = max_column - frame_col_size
         else:
             col += cols_direction
 
@@ -241,29 +241,24 @@ def run_event_loop(canvas):
     canvas.border()
     canvas.nodelay(True)
 
-    window_height, window_width = canvas.getmaxyx()
-
+    max_row, max_column = canvas.getmaxyx()
     # Compute correct window sizes without border lines
-    window_height -= 2
-    window_width -= 2
+    max_row -= 2
+    max_column -= 2
 
     frames = read_frames()
 
-    if STAR_COEFF <= 0:
-        raise ValueError('START_COEFF should be more than 0.')
-
-    n_stars = int((window_height*window_width) * STAR_COEFF)
-    coordinates = {
-        (random.randint(1, window_width), random.randint(1, window_height))
-        for _ in range(0, n_stars)
-    }
-
-    coroutines = [blink(canvas, row=y, column=x, symbol=random.choice(STARS))
-                  for x, y in coordinates]
+    n_stars = int((max_row*max_column) * STAR_COEFF)
+    coordinates = {(random.randint(1, max_column), random.randint(1, max_row))
+                   for _ in range(0, n_stars)}
+    coroutines = [
+        blink(canvas, row=y, column=x, symbol=random.choice(STAR_SET))
+        for x, y in coordinates
+    ]
     coroutines.append(animate_spaceship(canvas,
                                         frames=frames,
-                                        start_row=window_height // 2,
-                                        start_column=window_width // 2,
+                                        start_row=max_row // 2,
+                                        start_column=max_column // 2,
                                         row_speed=2,
                                         column_speed=2))
     while True:
@@ -279,6 +274,12 @@ def run_event_loop(canvas):
         time.sleep(TIC_TIMEOUT)
 
 
-if __name__ == '__main__':
+def main():
+    assert STAR_COEFF > 0
+
     curses.update_lines_cols()
     curses.wrapper(run_event_loop)
+
+
+if __name__ == '__main__':
+    main()
