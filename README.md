@@ -10,10 +10,6 @@ a virtual environment:
 ```shell script
 python3 -m venv venv && source ./venv/bin/activate
 ```
-and install needed packages
-```shell script
-pip install -r requieremnts.txt
-```
 
 ### Run
 Just type in an activated environments the next command:

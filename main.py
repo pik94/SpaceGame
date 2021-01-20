@@ -1,10 +1,10 @@
+import asyncio
 import curses
+import itertools
 from pathlib import Path
 import random
 import time
 from typing import Dict, Optional, Tuple, Union
-
-import asyncio
 
 
 TIC_TIMEOUT = 0.1
@@ -15,6 +15,10 @@ LEFT_KEY_CODE = 260
 RIGHT_KEY_CODE = 261
 UP_KEY_CODE = 259
 DOWN_KEY_CODE = 258
+
+# The higher the coefficient, the more stars on the sky.
+# Should be more than 0
+STAR_COEFF = 0.25
 
 
 def read_frames() -> Dict[str, str]:
@@ -168,17 +172,16 @@ async def animate_spaceship(canvas,
     """
 
     row, col = start_row, start_column
-    row_size, col_size = get_frame_size(frames['rocket_frame_1'])
-    y_max, x_max = canvas.getmaxyx()
-    y_max, x_max = y_max - 1, x_max - 1
-
-    while True:
-        draw_frame(canvas, row, col, frames['rocket_frame_1'])
+    frame_row_size, frame_col_size = get_frame_size(frames['rocket_frame_1'])
+    window_height, window_width = canvas.getmaxyx()
+    # Compute correct window sizes including borders
+    window_height -= 1
+    window_width -= 1
+    spaceship_frames = [frames['rocket_frame_1'], frames['rocket_frame_2']]
+    for frame in itertools.cycle(spaceship_frames):
+        draw_frame(canvas, row, col, frame)
         await sleep(1)
-        draw_frame(canvas, row, col, frames['rocket_frame_1'], negative=True)
-        draw_frame(canvas, row, col, frames['rocket_frame_2'])
-        await sleep(1)
-        draw_frame(canvas, row, col, frames['rocket_frame_2'], negative=True)
+        draw_frame(canvas, row, col, frame, negative=True)
 
         rows_direction, cols_direction, space_pressed = read_controls(canvas)
         rows_direction *= row_speed
@@ -186,23 +189,28 @@ async def animate_spaceship(canvas,
 
         if row + rows_direction <= 0:
             row = 1
-        elif row + rows_direction + row_size > y_max:
-            row = y_max - row_size
+        elif row + rows_direction + frame_row_size > window_height:
+            row = window_height - frame_row_size
         else:
             row += rows_direction
 
         if col + cols_direction <= 0:
             col = 1
-        elif col + cols_direction + col_size >= x_max:
-            col = x_max - col_size
+        elif col + cols_direction + frame_col_size >= window_width:
+            col = window_width - frame_col_size
         else:
             col += cols_direction
 
 
-async def sleep(seconds: Union[float, int] = 0):
-    if not seconds:
-        seconds = random.randint(1, 10)
-    for _ in range(0, seconds):
+async def sleep(ticks: Union[float, int] = 0):
+    """
+    Sleep a task.
+    :param ticks: if it sleep randomly between 1 and 10 ticks.
+    :return:
+    """
+    if not ticks:
+        ticks = random.randint(1, 10)
+    for _ in range(0, ticks):
         await asyncio.sleep(0)
 
 
@@ -233,33 +241,29 @@ def run_event_loop(canvas):
     canvas.border()
     canvas.nodelay(True)
 
-    y_max, x_max = canvas.getmaxyx()
-    y_max -= 2
-    x_max -= 2
+    window_height, window_width = canvas.getmaxyx()
+
+    # Compute correct window sizes without border lines
+    window_height -= 2
+    window_width -= 2
 
     frames = read_frames()
 
-    n_stars = (y_max*x_max) // 4
-    coroutines = {}
-    for _ in range(0, n_stars):
-        x = random.randint(1, x_max)
-        y = random.randint(1, y_max)
-        if (x, y) in coroutines:
-            continue
+    if STAR_COEFF <= 0:
+        raise ValueError('START_COEFF should be more than 0.')
 
-        coroutines[(x, y)] = blink(canvas,
-                                   row=y,
-                                   column=x,
-                                   symbol=random.choice(STARS))
+    n_stars = int((window_height*window_width) * STAR_COEFF)
+    coordinates = {
+        (random.randint(1, window_width), random.randint(1, window_height))
+        for _ in range(0, n_stars)
+    }
 
-    coroutines = list(coroutines.values())
-    # coroutines.append(fire(canvas,
-    #                        start_row=y_max,
-    #                        start_column=x_max // 2))
+    coroutines = [blink(canvas, row=y, column=x, symbol=random.choice(STARS))
+                  for x, y in coordinates]
     coroutines.append(animate_spaceship(canvas,
                                         frames=frames,
-                                        start_row=y_max // 2,
-                                        start_column=x_max // 2,
+                                        start_row=window_height // 2,
+                                        start_column=window_width // 2,
                                         row_speed=2,
                                         column_speed=2))
     while True:
