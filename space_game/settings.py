@@ -6,7 +6,11 @@ class SkySettings:
 
     # The higher the coefficient, the more stars on the sky.
     # Should be more than 0
-    STAR_COEFF = 0.25
+    STAR_COEFF = 0.005
+
+    # The higher the coefficient, the more stars on the sky.
+    # Should be more than 0
+    RUBBISH_COEFF = 0.01
 
 
 class ContolSettings:

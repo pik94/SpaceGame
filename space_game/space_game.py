@@ -11,7 +11,10 @@ from space_game.settings import SkySettings, ContolSettings, TIC_TIMEOUT
 
 
 class Frame:
-    def __init__(self, content: str, name: Optional[str] = ''):
+    def __init__(self,
+                 content: str,
+                 name: Optional[str] = ''
+                 ):
         self.content = content
         self.name = name
         self.height, self.width = get_frame_size(self.content)
@@ -65,7 +68,7 @@ class MapObject:
         Check that this object and another are intersected by
         framing rectangles.
         :param other:
-        :return: True if there is intersection and Flase otherwise
+        :return: True if there is intersection and False otherwise
         """
 
         x_bottom, y_bottom = self.x, self.y
@@ -98,7 +101,7 @@ class SpaceGame:
     def __init__(self):
         self._coroutines = []
         self._all_frames = read_objects(Path.cwd() / 'frames')
-        self._map_objects = {}
+        self._dynamic_objects = {}
 
         self._canvas = None
 
@@ -128,7 +131,11 @@ class SpaceGame:
         coordinates = {(random.randint(1, max_x), random.randint(1, max_y))
                        for _ in range(0, n_stars)}
         self._coroutines = [
-            self.blink(x=x, y=y, symbol=random.choice(SkySettings.STAR_SET))
+            self.blink(MapObject(
+                frame=Frame(random.choice(SkySettings.STAR_SET)),
+                start_x=x,
+                start_y=y)
+            )
             for x, y in coordinates
         ]
         self._coroutines.append(self.animate_spaceship(start_y=6, start_x=6,
@@ -205,7 +212,7 @@ class SpaceGame:
         spaceship = MapObject(frame=self._all_frames['rocket_frame_1'],
                               start_x=start_x,
                               start_y=start_y)
-        self._map_objects['spaceship'] = spaceship
+        self._dynamic_objects['spaceship'] = spaceship
 
         for i in itertools.cycle([1, 2]):
             x, y = spaceship.current_coordinates()
@@ -237,13 +244,12 @@ class SpaceGame:
             spaceship.change_frame(frame)
             spaceship.change_coordinates(x, y)
 
-    async def blink(self,
-                    x: int,
-                    y: int,
-                    symbol: Optional[str] = '*'):
+    async def blink(self, star: MapObject):
         """
         Draw a blinking symbol.
         """
+        x, y = star.current_coordinates()
+        symbol = star.frame.content
         while True:
             self._canvas.addstr(y, x, symbol, curses.A_DIM)
             await sleep()
@@ -276,7 +282,7 @@ class SpaceGame:
             draw_frame(self._canvas, x, y, rubbish_object.frame, negative=True)
             y += speed
 
-        self._map_objects.pop(rubbish_id)
+        self._dynamic_objects.pop(rubbish_id)
 
     async def fill_orbit_with_garbage(self,
                                       rubbish_frames: List[Frame]):
@@ -285,7 +291,9 @@ class SpaceGame:
 
         while True:
             rubbish_coroutines = []
-            n_spawned_objects = random.randint(1, max_x // max_frame_width)
+            right_border = max(2, max_x * SkySettings.RUBBISH_COEFF //
+                               max_frame_width)
+            n_spawned_objects = random.randint(1, int(right_border))
             next_object = False
             for _ in range(0, n_spawned_objects):
                 frame = rubbish_frames[
@@ -293,7 +301,7 @@ class SpaceGame:
                 start_x = random.randint(-frame.width + 2, max_x - 2)
                 start_y = -frame.height
                 rubbish_object = MapObject(frame, start_x, start_y)
-                for existing_object in self._map_objects.values():
+                for existing_object in self._dynamic_objects.values():
                     if (rubbish_object.intersect(existing_object)
                             or existing_object.intersect(rubbish_object)):
                         next_object = True
@@ -303,11 +311,12 @@ class SpaceGame:
                     next_object = False
                     continue
                 rubbish_id = uuid.uuid4()
-                if rubbish_id in self._map_objects:
+                if rubbish_id in self._dynamic_objects:
                     continue
 
-                self._map_objects[rubbish_id] = rubbish_object
-                rubbish_coroutines.append(self.fly_garbage(rubbish_object, rubbish_id))
+                self._dynamic_objects[rubbish_id] = rubbish_object
+                rubbish_coroutines.append(self.fly_garbage(rubbish_object,
+                                                           rubbish_id))
 
             if rubbish_coroutines:
                 self._coroutines.extend(rubbish_coroutines)
@@ -422,5 +431,7 @@ async def sleep(ticks: Union[float, int] = 0):
     """
     if not ticks:
         ticks = random.randint(1, 10)
+    else:
+        ticks = round(ticks)
     for _ in range(0, ticks):
         await asyncio.sleep(0)
