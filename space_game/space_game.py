@@ -167,10 +167,10 @@ class SpaceGame:
         x, y = start_x, start_y
 
         self._canvas.addstr(round(y), round(x), '*')
-        await asyncio.sleep(0)
+        await sleep(0)
 
         self._canvas.addstr(round(y), round(x), 'O')
-        await asyncio.sleep(0)
+        await sleep(0)
         self._canvas.addstr(round(y), round(x), ' ')
 
         x += x_speed
@@ -185,7 +185,7 @@ class SpaceGame:
 
         while 1 < y < max_y and 1 < x < max_x:
             self._canvas.addstr(round(y), round(x), symbol)
-            await asyncio.sleep(0)
+            await sleep(0)
             self._canvas.addstr(round(y), round(x), ' ')
             y += y_speed
             x += x_speed
@@ -252,16 +252,16 @@ class SpaceGame:
         symbol = star.frame.content
         while True:
             self._canvas.addstr(y, x, symbol, curses.A_DIM)
-            await sleep()
+            await sleep(random.randint(1, 10))
 
             self._canvas.addstr(y, x, symbol)
-            await sleep()
+            await sleep(random.randint(1, 10))
 
             self._canvas.addstr(y, x, symbol, curses.A_BOLD)
-            await sleep()
+            await sleep(random.randint(1, 10))
 
             self._canvas.addstr(y, x, symbol)
-            await sleep()
+            await sleep(random.randint(1, 10))
 
     async def fly_garbage(self,
                           rubbish_object: MapObject,
@@ -278,7 +278,7 @@ class SpaceGame:
         while y < max_y:
             rubbish_object.change_coordinates(x, y)
             draw_frame(self._canvas, x, y, rubbish_object.frame)
-            await asyncio.sleep(0)
+            await sleep(0)
             draw_frame(self._canvas, x, y, rubbish_object.frame, negative=True)
             y += speed
 
@@ -429,9 +429,9 @@ async def sleep(ticks: Union[float, int] = 0):
     :param ticks: if it sleep randomly between 1 and 10 ticks.
     :return:
     """
+
     if not ticks:
-        ticks = random.randint(1, 10)
-    else:
-        ticks = round(ticks)
-    for _ in range(0, ticks):
         await asyncio.sleep(0)
+    else:
+        for _ in range(0, round(ticks)):
+            await asyncio.sleep(0)
