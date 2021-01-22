@@ -99,7 +99,7 @@ class MapObject:
 
 class SpaceGame:
     def __init__(self):
-        self._coroutines = {}
+        self._coroutines = []
         self._all_frames = read_objects(Path.cwd() / 'frames')
         self._dynamic_objects = {}
 
@@ -130,32 +130,30 @@ class SpaceGame:
         n_stars = int((max_y*max_x) * SkySettings.STAR_COEFF)
         coordinates = {(random.randint(1, max_x), random.randint(1, max_y))
                        for _ in range(0, n_stars)}
-        self._coroutines = {
-            f'star_{i}': self.blink(MapObject(
-                            frame=Frame(random.choice(SkySettings.STAR_SET)),
-                            start_x=x,
-                            start_y=y))
+        self._coroutines = [
+            self.blink(MapObject(
+                frame=Frame(random.choice(SkySettings.STAR_SET)),
+                start_x=x,
+                start_y=y)
+            )
             for i, (x, y) in enumerate(coordinates)
-        }
-        self._coroutines['spaceship'] = self.animate_spaceship(start_y=10,
-                                                               start_x=10)
+        ]
+        self._coroutines.append(self.animate_spaceship(start_y=10, start_x=10))
+        self._coroutines.append(self.fill_orbit_with_garbage(rubbish_frames))
 
-        self._coroutines['garbage'] = self.fill_orbit_with_garbage(
-            rubbish_frames)
         while True:
-            for coroutine_id, coroutine in self._coroutines.copy().items():
+            for coroutine in self._coroutines.copy():
                 try:
                     coroutine.send(None)
                     self._canvas.refresh()
                 except StopIteration:
-                    self._coroutines.pop(coroutine_id, None)
+                    self._coroutines.remove(coroutine)
             if not self._coroutines:
                 break
 
             time.sleep(TIC_TIMEOUT)
 
     async def fire(self,
-                   fire_id: str,
                    start_x: int,
                    start_y: int,
                    x_speed: Optional[Union[float, int]] = 0,
@@ -195,8 +193,6 @@ class SpaceGame:
                     draw_frame(self._canvas, obj.x, obj.y, obj.frame,
                                negative=True)
                     self._dynamic_objects.pop(obj_id)
-                    self._coroutines.pop(obj_id)
-                    self._coroutines.pop(fire_id)
                     return
 
             y += y_speed
@@ -223,7 +219,6 @@ class SpaceGame:
                               start_y=start_y)
         self._dynamic_objects['spaceship'] = spaceship
 
-        fire_count = 0
         for i in itertools.cycle([1, 2]):
             x, y = spaceship.current_coordinates()
             frame = self._all_frames[f'rocket_frame_{i}']
@@ -253,12 +248,7 @@ class SpaceGame:
 
             if space_pressed:
                 x_fire = round(x + spaceship.frame.width // 2)
-                fire_id = f'fire_{fire_count}'
-                self._coroutines[fire_id] = self.fire(fire_id, x_fire, y)
-                if fire_count > 1000000:
-                    fire_count = 0
-                else:
-                    fire_count += 1
+                self._coroutines.append(self.fire(x_fire, y))
 
             spaceship.change_frame(frame)
             spaceship.change_coordinates(x, y)
@@ -295,6 +285,8 @@ class SpaceGame:
 
         x, y = rubbish_object.current_coordinates()
         while y < max_y:
+            if rubbish_id not in self._dynamic_objects:
+                return
             rubbish_object.change_coordinates(x, y)
             draw_frame(self._canvas, x, y, rubbish_object.frame)
             await sleep(0)
@@ -310,7 +302,7 @@ class SpaceGame:
 
         rubbish_count = 0
         while True:
-            rubbish_coroutines = {}
+            rubbish_coroutines = []
             right_border = max(2, max_x * SkySettings.RUBBISH_COEFF //
                                max_frame_width)
             n_spawned_objects = random.randint(1, int(right_border))
@@ -338,11 +330,11 @@ class SpaceGame:
                     rubbish_count += 1
 
                 self._dynamic_objects[rubbish_id] = rubbish_object
-                rubbish_coroutines[rubbish_id] = self.fly_garbage(
-                    rubbish_object, rubbish_id)
+                rubbish_coroutines.append(self.fly_garbage(rubbish_object,
+                                                           rubbish_id))
 
             if rubbish_coroutines:
-                self._coroutines.update(rubbish_coroutines)
+                self._coroutines.extend(rubbish_coroutines)
             await sleep(5)
 
 
