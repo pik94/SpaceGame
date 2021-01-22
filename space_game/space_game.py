@@ -254,6 +254,30 @@ class SpaceGame:
             spaceship.change_frame(frame)
             spaceship.change_coordinates(x, y)
 
+            await self.check_game_over(spaceship, max_x, max_y)
+
+    async def check_game_over(self,
+                              spaceship: MapObject,
+                              max_x: int,
+                              max_y: int):
+        """
+        Check if the spaceship is hit to a rubbish. If it's "Game Over"
+        is printed.
+        :param spaceship:
+        :param max_x: max x coordinate
+        :param max_y: max y coordinate
+        :return:
+        """
+
+        for obj_id, obj in self._dynamic_objects.items():
+            if not obj_id.startswith('rubbish'):
+                continue
+            if spaceship.intersect(obj):
+                while True:
+                    draw_frame(self._canvas, max_x // 4, max_y // 2,
+                               self._all_frames['other']['game_over'])
+                    await sleep(0)
+
     async def blink(self, star: MapObject):
         """
         Draw a blinking symbol.
