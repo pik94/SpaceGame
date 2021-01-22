@@ -4,7 +4,96 @@ from pathlib import Path
 from typing import Dict, NoReturn, Optional, Tuple, Union
 
 from space_game.settings import ContolSettings
-from space_game.space_game import Frame
+
+
+class Frame:
+    def __init__(self,
+                 content: str,
+                 name: Optional[str] = ''
+                 ):
+        self.content = content
+        self.name = name
+        self.height, self.width = get_frame_size(self.content)
+
+    def __str__(self) -> str:
+        return f'{Frame.__name__}(name={self.name})'
+
+    __repr__ = __str__
+
+
+class MapObject:
+    """
+    This class represents a position of an object on the map
+    """
+
+    def __init__(self,
+                 frame: Frame,
+                 start_x: Union[float, int],
+                 start_y: Union[float, int]
+                 ):
+        self.frame = frame
+        self.x = start_x
+        self.y = start_y
+        self.start_x = start_x
+        self.start_y = start_y
+
+    def __str__(self) -> str:
+        return f'{MapObject.__name__}(' \
+               f'frame={self.frame}, ' \
+               f'current_x={self.x}, ' \
+               f'current_y={self.y}, ' \
+               f'start_x={self.start_x}, ' \
+               f'start_y={self.start_y})'
+
+    __repr__ = __str__
+
+    def current_coordinates(self) -> Tuple[int, int]:
+        return self.x, self.y
+
+    def change_coordinates(self,
+                           x: Union[float, int],
+                           y: Union[float, int]) -> NoReturn:
+        self.x = x
+        self.y = y
+
+    def change_frame(self, frame: Frame) -> NoReturn:
+        self.frame = frame
+
+    def intersect(self, other: 'MapObject') -> bool:
+        """
+        Check that this object and another are intersected by
+        framing rectangles.
+        :param other:
+        :return: True if there is intersection and False otherwise
+        """
+
+        x_bottom, y_bottom = self.x, self.y
+        x_top = self.x + self.frame.width
+        y_top = self.y + self.frame.height
+
+        x_bottom_other, y_bottom_other = other.current_coordinates()
+        x_top_other = x_bottom_other + other.frame.width
+        y_top_other = y_bottom_other + other.frame.height
+
+        if x_bottom <= x_bottom_other <= x_top:
+            if y_bottom <= y_bottom_other <= y_top:
+                return True
+            elif y_bottom <= y_top_other <= y_top:
+                return True
+            else:
+                return False
+        elif x_bottom <= x_top_other <= x_top:
+            if y_bottom <= y_bottom_other <= y_top:
+                return True
+            elif y_bottom <= y_top_other <= y_top:
+                return True
+            else:
+                return False
+
+        return False
+
+    def __and__(self, other: 'MapObject') -> bool:
+        return self.intersect(other) or other.intersect(self)
 
 
 async def sleep(ticks: Union[float, int] = 0) -> NoReturn:
