@@ -25,6 +25,7 @@ class SpaceGame:
 
     def run(self) -> NoReturn:
         assert MapSettings.STAR_COEFF > 0
+        assert MapSettings.RUBBISH_COEFF >= 0
 
         curses.update_lines_cols()
         curses.wrapper(self._run_event_loop)
@@ -262,6 +263,8 @@ class SpaceGame:
         max_rubbish_count = max_x * max_y // min(frame.height * frame.width
                                                  for frame in rubbish_frames)
         while True:
+            await sleep(MapSettings.RUBBISH_COEFF)
+
             produce_next = False
             frame = rubbish_frames[
                 random.randint(0, len(rubbish_frames) - 1)]
@@ -284,8 +287,8 @@ class SpaceGame:
                 rubbish_count = 0
             else:
                 rubbish_count += 1
-            rubbish_id = f'rubbish_{rubbish_count}'
 
+            rubbish_id = f'rubbish_{rubbish_count}'
             self._dynamic_objects[rubbish_id] = rubbish_object
             self._coroutines.append(self.fly_garbage(rubbish_object,
                                                      rubbish_id))

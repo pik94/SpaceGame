@@ -9,8 +9,8 @@ class MapSettings:
     STAR_COEFF = 0.005
 
     # The higher the coefficient, the more stars on the sky.
-    # Should be more than 0
-    RUBBISH_COEFF = 0.01
+    # Should be more or equal to 0
+    RUBBISH_COEFF = 0
     START_YEAR = 1950
 
     PHRASES = {
