@@ -1,5 +1,6 @@
 import asyncio
 import curses
+from collections import defaultdict
 import itertools
 from pathlib import Path
 import random
@@ -7,7 +8,7 @@ import time
 from typing import Dict, List, NoReturn, Optional, Tuple, Union
 
 from space_game.physics import update_speed
-from space_game.settings import SkySettings, ContolSettings, TIC_TIMEOUT
+from space_game.settings import MapSettings, ContolSettings, TIC_TIMEOUT
 
 
 class Frame:
@@ -106,7 +107,7 @@ class SpaceGame:
         self._canvas = None
 
     def run(self) -> NoReturn:
-        assert SkySettings.STAR_COEFF > 0
+        assert MapSettings.STAR_COEFF > 0
 
         curses.update_lines_cols()
         curses.wrapper(self._run_event_loop)
@@ -123,23 +124,19 @@ class SpaceGame:
         max_y -= 2
         max_x -= 2
 
-        rubbish_frames = [frame
-                          for name, frame in self._all_frames.items()
-                          if not name.startswith('rocket')]
-
-        n_stars = int((max_y*max_x) * SkySettings.STAR_COEFF)
+        n_stars = int((max_y*max_x) * MapSettings.STAR_COEFF)
         coordinates = {(random.randint(1, max_x), random.randint(1, max_y))
                        for _ in range(0, n_stars)}
         self._coroutines = [
             self.blink(MapObject(
-                frame=Frame(random.choice(SkySettings.STAR_SET)),
+                frame=Frame(random.choice(MapSettings.STAR_SET)),
                 start_x=x,
                 start_y=y)
             )
             for i, (x, y) in enumerate(coordinates)
         ]
         self._coroutines.append(self.animate_spaceship(start_y=10, start_x=10))
-        self._coroutines.append(self.fill_orbit_with_garbage(rubbish_frames))
+        self._coroutines.append(self.fill_orbit_with_garbage())
 
         while True:
             for coroutine in self._coroutines.copy():
@@ -193,6 +190,7 @@ class SpaceGame:
                     draw_frame(self._canvas, obj.x, obj.y, obj.frame,
                                negative=True)
                     self._dynamic_objects.pop(obj_id)
+                    await self.explode(obj.x, obj.y)
                     return
 
             y += y_speed
@@ -214,14 +212,17 @@ class SpaceGame:
         max_x -= 1
         max_y -= 1
 
-        spaceship = MapObject(frame=self._all_frames['rocket_frame_1'],
-                              start_x=start_x,
-                              start_y=start_y)
+        spaceship_frames = self._all_frames['spaceship']
+        spaceship = MapObject(
+            frame=spaceship_frames['rocket_frame_1'],
+            start_x=start_x,
+            start_y=start_y
+        )
         self._dynamic_objects['spaceship'] = spaceship
 
         for i in itertools.cycle([1, 2]):
             x, y = spaceship.current_coordinates()
-            frame = self._all_frames[f'rocket_frame_{i}']
+            frame = spaceship_frames[f'rocket_frame_{i}']
 
             draw_frame(self._canvas, x, y, frame)
             for _ in range(0, 2):
@@ -295,15 +296,20 @@ class SpaceGame:
 
         self._dynamic_objects.pop(rubbish_id)
 
-    async def fill_orbit_with_garbage(self,
-                                      rubbish_frames: List[Frame]):
+    async def fill_orbit_with_garbage(self):
+        rubbish_frames = [
+            frame
+            for name, frame in self._all_frames['rubbish'].items()
+            if not name.startswith('rocket')
+        ]
+
         max_y, max_x = self._canvas.getmaxyx()
         max_frame_width = max([frame.width for frame in rubbish_frames])
 
         rubbish_count = 0
         while True:
             rubbish_coroutines = []
-            right_border = max(2, max_x * SkySettings.RUBBISH_COEFF //
+            right_border = max(2, max_x * MapSettings.RUBBISH_COEFF //
                                max_frame_width)
             n_spawned_objects = random.randint(1, int(right_border))
             next_object = False
@@ -337,19 +343,31 @@ class SpaceGame:
                 self._coroutines.extend(rubbish_coroutines)
             await sleep(5)
 
+    async def explode(self, x, y):
+        explosion_frames = self._all_frames['explosion']
+        curses.beep()
+        for frame in explosion_frames.values():
+            draw_frame(self._canvas, x, y, frame)
 
-def read_objects(path: Path) -> Dict[str, Frame]:
+            await asyncio.sleep(0)
+            draw_frame(self._canvas, x, y, frame, negative=True)
+            await asyncio.sleep(0)
+
+
+def read_objects(path: Path) -> Dict[str, Dict[str, Frame]]:
     """
     Read objects the files and returns them in a string representation.
     :param path: a directory with objects.
-    :return: A dict where a key is a file name without suffix and a value is
+    :return: A dict where a key is an object category and a value is a dict
+        where a key is a file name without suffix and a value is
         a string representing the frame.
     """
 
-    objects = {}
-    for dir_path in path.glob('*'):
+    objects = defaultdict(dict)
+    for dir_path in path.glob('*/*'):
         with open(dir_path, 'r') as file:
-            objects[dir_path.stem] = Frame(''.join(file), dir_path.stem)
+            objects[dir_path.parent.stem][dir_path.stem] = Frame(''.join(file),
+                                                                 dir_path.stem)
 
     return objects
 

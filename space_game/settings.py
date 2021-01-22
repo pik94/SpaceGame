@@ -1,7 +1,7 @@
 TIC_TIMEOUT = 0.1
 
 
-class SkySettings:
+class MapSettings:
     STAR_SET = ['+', '*', '.', ':']
 
     # The higher the coefficient, the more stars on the sky.
