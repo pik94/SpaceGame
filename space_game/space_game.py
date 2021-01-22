@@ -7,6 +7,7 @@ import time
 from typing import Dict, List, NoReturn, Optional, Tuple, Union
 import uuid
 
+from space_game.physics import update_speed
 from space_game.settings import SkySettings, ContolSettings, TIC_TIMEOUT
 
 
@@ -118,6 +119,8 @@ class SpaceGame:
         self._canvas.border()
         self._canvas.nodelay(True)
 
+        # self._canvas.addstr(1, 1, 'a')
+
         max_y, max_x = self._canvas.getmaxyx()
         # Compute correct window sizes without border lines
         max_y -= 2
@@ -138,8 +141,7 @@ class SpaceGame:
             )
             for x, y in coordinates
         ]
-        self._coroutines.append(self.animate_spaceship(start_y=6, start_x=6,
-                                                       y_speed=2, x_speed=2))
+        self._coroutines.append(self.animate_spaceship(start_y=1, start_x=1))
 
         self._coroutines.append(self.fill_orbit_with_garbage(rubbish_frames))
         while True:
@@ -192,18 +194,15 @@ class SpaceGame:
 
     async def animate_spaceship(self,
                                 start_x: int,
-                                start_y: int,
-                                x_speed: Optional[Union[int, float]] = 1,
-                                y_speed: Optional[Union[int, float]] = 1):
+                                start_y: int):
         """
         A coroutine for drawing and moving the spaceship.
         :param start_x: a start x (column) point for the spaceship
         :param start_y: a start y (row) point for the spaceship
-        :param x_speed: speed along x axis (column)
-        :param y_speed: speed along y axis (row)
         :return:
         """
 
+        x_speed, y_speed = 0, 0
         max_y, max_x = self._canvas.getmaxyx()
         # Compute correct window sizes including borders
         max_x -= 1
@@ -219,27 +218,31 @@ class SpaceGame:
             frame = self._all_frames[f'rocket_frame_{i}']
 
             draw_frame(self._canvas, x, y, frame)
-            await sleep(1)
-
+            for _ in range(0, 2):
+                x_direction, y_direction, space_pressed = \
+                    read_controls(self._canvas)
+                x_speed, y_speed = update_speed(x_speed, y_speed, x_direction,
+                                                y_direction)
+                await sleep(1)
             draw_frame(self._canvas, x, y, frame, negative=True)
 
-            x_move, y_move, space_pressed = read_controls(self._canvas)
-            x_move *= x_speed
-            y_move *= y_speed
-
-            if y + y_move <= 0:
+            if y + y_speed <= 1:
                 y = 1
-            elif y + y_move + frame.height > max_y:
+            elif y + y_speed + frame.height > max_y:
                 y = max_y - frame.height
             else:
-                y += y_move
+                y += y_speed
 
-            if x + x_move <= 0:
+            if x + x_speed <= 1:
                 x = 1
-            elif x + x_move + frame.width >= max_x:
+            elif x + x_speed + frame.width >= max_x:
                 x = max_x - frame.width
             else:
-                x += x_move
+                x += x_speed
+
+            if space_pressed:
+                x_fire = round(x + spaceship.frame.width // 2)
+                self._coroutines.append(self.fire(x_fire, y))
 
             spaceship.change_frame(frame)
             spaceship.change_coordinates(x, y)
@@ -393,7 +396,7 @@ def draw_frame(canvas,
             if column <= 0:
                 continue
 
-            if column >= max_x:
+            if column >= max_x - 1:
                 break
 
             if symbol == ' ':
