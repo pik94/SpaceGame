@@ -5,7 +5,7 @@ import itertools
 from pathlib import Path
 import random
 import time
-from typing import Dict, List, NoReturn, Optional, Tuple, Union
+from typing import Dict, NoReturn, Optional, Tuple, Union
 
 from space_game.physics import update_speed
 from space_game.settings import MapSettings, ContolSettings, TIC_TIMEOUT
@@ -97,6 +97,9 @@ class MapObject:
 
         return False
 
+    def __and__(self, other: 'MapObject') -> bool:
+        return self.intersect(other) or other.intersect(self)
+
 
 class SpaceGame:
     def __init__(self):
@@ -105,6 +108,7 @@ class SpaceGame:
         self._dynamic_objects = {}
 
         self._canvas = None
+        self._current_year = MapSettings.START_YEAR
 
     def run(self) -> NoReturn:
         assert MapSettings.STAR_COEFF > 0
@@ -114,8 +118,8 @@ class SpaceGame:
 
     def _run_event_loop(self, canvas) -> NoReturn:
         curses.curs_set(False)
-        self._canvas = canvas
 
+        self._canvas = canvas
         self._canvas.border()
         self._canvas.nodelay(True)
 
@@ -133,10 +137,12 @@ class SpaceGame:
                 start_x=x,
                 start_y=y)
             )
-            for i, (x, y) in enumerate(coordinates)
+            for x, y in coordinates
         ]
         self._coroutines.append(self.animate_spaceship(start_y=10, start_x=10))
         self._coroutines.append(self.fill_orbit_with_garbage())
+        self._coroutines.append(self.draw_timer())
+        self._coroutines.append(self.increase_year())
 
         while True:
             for coroutine in self._coroutines.copy():
@@ -154,14 +160,13 @@ class SpaceGame:
                    start_x: int,
                    start_y: int,
                    x_speed: Optional[Union[float, int]] = 0,
-                   y_speed: Optional[Union[float, int]] = -0.3):
+                   y_speed: Optional[Union[float, int]] = -0.3) -> NoReturn:
         """
         Display animation of gun shot, direction and speed
         can be specified.
         """
 
         x, y = start_x, start_y
-
         self._canvas.addstr(round(y), round(x), '*')
         await sleep(0)
 
@@ -185,8 +190,7 @@ class SpaceGame:
             self._canvas.addstr(round(y), round(x), ' ')
             fire_shot_object.change_coordinates(x + x_speed, y + y_speed)
             for obj_id, obj in self._dynamic_objects.items():
-                if (obj_id.startswith('rubbish')
-                        and obj.intersect(fire_shot_object)):
+                if obj_id.startswith('rubbish') and obj & fire_shot_object:
                     draw_frame(self._canvas, obj.x, obj.y, obj.frame,
                                negative=True)
                     self._dynamic_objects.pop(obj_id)
@@ -198,7 +202,7 @@ class SpaceGame:
 
     async def animate_spaceship(self,
                                 start_x: int,
-                                start_y: int):
+                                start_y: int) -> NoReturn:
         """
         A coroutine for drawing and moving the spaceship.
         :param start_x: a start x (column) point for the spaceship
@@ -247,7 +251,7 @@ class SpaceGame:
             else:
                 x += x_speed
 
-            if space_pressed:
+            if space_pressed and self._current_year >= 2020:
                 x_fire = round(x + spaceship.frame.width // 2)
                 self._coroutines.append(self.fire(x_fire, y))
 
@@ -259,7 +263,7 @@ class SpaceGame:
     async def check_game_over(self,
                               spaceship: MapObject,
                               max_x: int,
-                              max_y: int):
+                              max_y: int) ->NoReturn:
         """
         Check if the spaceship is hit to a rubbish. If it's "Game Over"
         is printed.
@@ -272,13 +276,13 @@ class SpaceGame:
         for obj_id, obj in self._dynamic_objects.items():
             if not obj_id.startswith('rubbish'):
                 continue
-            if spaceship.intersect(obj):
+            if spaceship & obj:
                 while True:
                     draw_frame(self._canvas, max_x // 4, max_y // 2,
                                self._all_frames['other']['game_over'])
                     await sleep(0)
 
-    async def blink(self, star: MapObject):
+    async def blink(self, star: MapObject) -> NoReturn:
         """
         Draw a blinking symbol.
         """
@@ -300,7 +304,7 @@ class SpaceGame:
     async def fly_garbage(self,
                           rubbish_object: MapObject,
                           rubbish_id: str,
-                          speed: Optional[float] = 0.5):
+                          speed: Optional[float] = 0.5) -> NoReturn:
         """
         Animate garbage, flying from top to bottom.
         A start_x position will stay same, as specified on start.
@@ -312,6 +316,7 @@ class SpaceGame:
         while y < max_y:
             if rubbish_id not in self._dynamic_objects:
                 return
+
             rubbish_object.change_coordinates(x, y)
             draw_frame(self._canvas, x, y, rubbish_object.frame)
             await sleep(0)
@@ -320,7 +325,17 @@ class SpaceGame:
 
         self._dynamic_objects.pop(rubbish_id)
 
-    async def fill_orbit_with_garbage(self):
+    async def fill_orbit_with_garbage(self) -> NoReturn:
+        """
+        This method produces rubbish on the map
+        """
+
+        # Wait for a year when the first rubbish will appear on the map
+        delay_tick = get_garbage_delay_tics(self._current_year)
+        while delay_tick is None:
+            await sleep(5)
+            delay_tick = get_garbage_delay_tics(self._current_year)
+
         rubbish_frames = [
             frame
             for name, frame in self._all_frames['rubbish'].items()
@@ -328,53 +343,90 @@ class SpaceGame:
         ]
 
         max_y, max_x = self._canvas.getmaxyx()
-        max_frame_width = max([frame.width for frame in rubbish_frames])
-
         rubbish_count = 0
+
+        # This variable shows how much rubbish can be on the map simultaneously
+        max_rubbish_count = max_x * max_y // min(frame.height * frame.width
+                                                 for frame in rubbish_frames)
         while True:
-            rubbish_coroutines = []
-            right_border = max(2, max_x * MapSettings.RUBBISH_COEFF //
-                               max_frame_width)
-            n_spawned_objects = random.randint(1, int(right_border))
-            next_object = False
-            for _ in range(0, n_spawned_objects):
-                frame = rubbish_frames[
-                    random.randint(0, len(rubbish_frames) - 1)]
-                start_x = random.randint(-frame.width + 2, max_x - 2)
-                start_y = -frame.height
-                rubbish_object = MapObject(frame, start_x, start_y)
-                for existing_object in self._dynamic_objects.values():
-                    if (rubbish_object.intersect(existing_object)
-                            or existing_object.intersect(rubbish_object)):
-                        next_object = True
-                        break
+            produce_next = False
+            frame = rubbish_frames[
+                random.randint(0, len(rubbish_frames) - 1)]
+            start_x = random.randint(-frame.width + 2, max_x - 2)
+            start_y = -frame.height
+            rubbish_object = MapObject(frame, start_x, start_y)
 
-                if next_object:
-                    next_object = False
-                    continue
+            # Check that a new rubbish sample does not overlap existing
+            # If it does, try to produce another sample.
+            for existing_object in self._dynamic_objects.values():
+                if rubbish_object & existing_object:
+                    produce_next = True
+                    break
 
-                rubbish_id = f'rubbish_{rubbish_count}'
-                if rubbish_count > 10000:
-                    rubbish_count = 0
-                else:
-                    rubbish_count += 1
+            if produce_next:
+                continue
 
-                self._dynamic_objects[rubbish_id] = rubbish_object
-                rubbish_coroutines.append(self.fly_garbage(rubbish_object,
-                                                           rubbish_id))
+            if rubbish_count > max_rubbish_count:
+                # Reset count because objects with old IDs disappeared
+                rubbish_count = 0
+            else:
+                rubbish_count += 1
+            rubbish_id = f'rubbish_{rubbish_count}'
 
-            if rubbish_coroutines:
-                self._coroutines.extend(rubbish_coroutines)
-            await sleep(5)
+            self._dynamic_objects[rubbish_id] = rubbish_object
+            self._coroutines.append(self.fly_garbage(rubbish_object,
+                                                     rubbish_id))
+            await sleep(get_garbage_delay_tics(self._current_year))
 
-    async def explode(self, x, y):
+    async def explode(self, x, y) -> NoReturn:
         explosion_frames = self._all_frames['explosion']
         curses.beep()
         for frame in explosion_frames.values():
             draw_frame(self._canvas, x, y, frame)
-
             await asyncio.sleep(0)
             draw_frame(self._canvas, x, y, frame, negative=True)
+            await asyncio.sleep(0)
+
+    async def draw_timer(self) -> NoReturn:
+        max_y, max_x = self._canvas.getmaxyx()
+        max_y -= 2
+        max_x -= 2
+        canvas = self._canvas.derwin(3, max_x // 2, max_y - 1, max_x // 2)
+
+        n_prev_phrase_symbols = 0
+        while True:
+            msg = f'Year: {self._current_year}'
+            phrase = MapSettings.PHRASES.get(self._current_year, "")
+            if phrase:
+                msg = f'{msg} - {phrase}'
+                n_prev_phrase_symbols = len(phrase) + 3
+            else:
+                msg = f'{msg}{" " * n_prev_phrase_symbols}'
+                n_prev_phrase_symbols = 0
+
+            canvas.addstr(1, 1, msg)
+            canvas.border()
+            canvas.refresh()
+            await sleep(0)
+
+    async def increase_year(self) -> NoReturn:
+        self._current_year = MapSettings.START_YEAR
+        while True:
+            await sleep(10)
+            self._current_year += 1
+
+
+async def sleep(ticks: Union[float, int] = 0) -> NoReturn:
+    """
+    Sleep a task.
+    :param ticks: if it sleep randomly between 1 and 10 ticks.
+    :return:
+    """
+
+    if not ticks:
+        await asyncio.sleep(0)
+    else:
+        for _ in range(0, round(ticks)):
             await asyncio.sleep(0)
 
 
@@ -431,7 +483,7 @@ def draw_frame(canvas,
                x: Union[float, int],
                y: Union[float, int],
                frame: Frame,
-               negative: Optional[bool] = False):
+               negative: Optional[bool] = False) -> NoReturn:
     """
     Draw multiline text fragment on canvas,
     erase text instead of drawing if negative=True is specified.
@@ -480,15 +532,18 @@ def get_frame_size(frame: str) -> Tuple[int, int]:
     return rows, columns
 
 
-async def sleep(ticks: Union[float, int] = 0):
-    """
-    Sleep a task.
-    :param ticks: if it sleep randomly between 1 and 10 ticks.
-    :return:
-    """
-
-    if not ticks:
-        await asyncio.sleep(0)
+def get_garbage_delay_tics(year: int) -> Union[None, int]:
+    if year < 1961:
+        return None
+    elif year < 1969:
+        return 20
+    elif year < 1981:
+        return 14
+    elif year < 1995:
+        return 10
+    elif year < 2010:
+        return 8
+    elif year < 2020:
+        return 6
     else:
-        for _ in range(0, round(ticks)):
-            await asyncio.sleep(0)
+        return 2
