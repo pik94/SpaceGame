@@ -9,7 +9,7 @@ from typing import NoReturn, Optional, Union
 from space_game.physics import update_speed
 from space_game.settings import MapSettings, TIC_TIMEOUT
 from space_game.utils import (
-    draw_frame, get_garbage_delay_tics, read_objects,
+    draw_frame, get_canvas_size, get_garbage_delay_tics, read_objects,
     read_controls, sleep, Frame, MapObject
 )
 
@@ -37,10 +37,13 @@ class SpaceGame:
         self._canvas.border()
         self._canvas.nodelay(True)
 
-        max_y, max_x = self._canvas.getmaxyx()
-        # Compute correct window sizes without border lines
-        max_y -= 2
-        max_x -= 2
+        max_y, max_x = get_canvas_size(self._canvas)
+        # If we try to change a cell with coordinates (max_y, max_x),
+        # curses will raise an exception (don't know why). So, to prevent
+        # putting an object (for example, a star) into this cell,
+        # we subtract 1 from each of components.
+        max_x -= 1
+        max_y -= 1
 
         n_stars = int((max_y*max_x) * MapSettings.STAR_COEFF)
         coordinates = {(random.randint(1, max_x), random.randint(1, max_y))
@@ -74,7 +77,7 @@ class SpaceGame:
                    start_x: int,
                    start_y: int,
                    x_speed: Optional[Union[float, int]] = 0,
-                   y_speed: Optional[Union[float, int]] = -0.3) -> NoReturn:
+                   y_speed: Optional[Union[float, int]] = -1) -> NoReturn:
         """
         Display animation of gun shot, direction and speed
         can be specified.
@@ -93,9 +96,7 @@ class SpaceGame:
 
         symbol = '-' if x_speed else '|'
 
-        max_y, max_x = self._canvas.getmaxyx()
-        max_y, max_x = max_y - 1, max_x - 1
-
+        max_y, max_x = get_canvas_size(self._canvas)
         curses.beep()
         fire_shot_object = MapObject(Frame(symbol), x, y)
         while 1 < y < max_y and 1 < x < max_x:
@@ -125,10 +126,7 @@ class SpaceGame:
         """
 
         x_speed, y_speed = 0, 0
-        max_y, max_x = self._canvas.getmaxyx()
-        # Compute correct window sizes including borders
-        max_x -= 1
-        max_y -= 1
+        max_y, max_x = get_canvas_size(self._canvas)
 
         spaceship_frames = self._all_frames['spaceship']
         spaceship = MapObject(
@@ -139,45 +137,48 @@ class SpaceGame:
         self._dynamic_objects['spaceship'] = spaceship
 
         for i in itertools.cycle([1, 2]):
-            x, y = spaceship.current_coordinates()
-            frame = spaceship_frames[f'rocket_frame_{i}']
-
-            draw_frame(self._canvas, x, y, frame)
             for _ in range(0, 2):
+                x, y = spaceship.current_coordinates()
+                frame = spaceship_frames[f'rocket_frame_{i}']
+
+                draw_frame(self._canvas, x, y, frame)
+
                 x_direction, y_direction, space_pressed = \
                     read_controls(self._canvas)
                 x_speed, y_speed = update_speed(x_speed, y_speed, x_direction,
                                                 y_direction)
                 await sleep(1)
-            draw_frame(self._canvas, x, y, frame, negative=True)
 
-            if y + y_speed <= 1:
-                y = 1
-            elif y + y_speed + frame.height > max_y:
-                y = max_y - frame.height
-            else:
-                y += y_speed
+                draw_frame(self._canvas, x, y, frame, negative=True)
 
-            if x + x_speed <= 1:
-                x = 1
-            elif x + x_speed + frame.width >= max_x:
-                x = max_x - frame.width
-            else:
-                x += x_speed
+                if y + y_speed <= 1:
+                    y = 1
+                elif y + y_speed + frame.height > max_y:
+                    y = max_y - frame.height
+                else:
+                    y += y_speed
 
-            if space_pressed and self._current_year >= 2020:
-                x_fire = round(x + spaceship.frame.width // 2)
-                self._coroutines.append(self.fire(x_fire, y))
+                if x + x_speed <= 1:
+                    x = 1
+                elif x + x_speed + frame.width >= max_x:
+                    x = max_x - frame.width
+                else:
+                    x += x_speed
 
-            spaceship.change_frame(frame)
-            spaceship.change_coordinates(x, y)
+                if (space_pressed
+                        and self._current_year >= MapSettings.PLASMA_GUN_YEAR):
+                    x_fire = round(x + spaceship.frame.width // 2)
+                    self._coroutines.append(self.fire(x_fire, y))
 
-            await self.check_game_over(spaceship, max_x, max_y)
+                spaceship.change_frame(frame)
+                spaceship.change_coordinates(x, y)
+
+                await self.check_game_over(spaceship, max_x, max_y)
 
     async def check_game_over(self,
                               spaceship: MapObject,
                               max_x: int,
-                              max_y: int) ->NoReturn:
+                              max_y: int) -> NoReturn:
         """
         Check if the spaceship is hit to a rubbish. If it's "Game Over"
         is printed.
@@ -224,7 +225,7 @@ class SpaceGame:
         A start_x position will stay same, as specified on start.
         """
 
-        max_y, max_x = self._canvas.getmaxyx()
+        max_y, max_x = get_canvas_size(self._canvas)
 
         x, y = rubbish_object.current_coordinates()
         while y < max_y:
@@ -256,7 +257,7 @@ class SpaceGame:
             if not name.startswith('rocket')
         ]
 
-        max_y, max_x = self._canvas.getmaxyx()
+        max_y, max_x = get_canvas_size(self._canvas)
         rubbish_count = 0
 
         # This variable shows how much rubbish can be on the map simultaneously
@@ -304,10 +305,8 @@ class SpaceGame:
             await asyncio.sleep(0)
 
     async def draw_timer(self) -> NoReturn:
-        max_y, max_x = self._canvas.getmaxyx()
-        max_y -= 2
-        max_x -= 2
-        canvas = self._canvas.derwin(3, max_x // 2, max_y - 1, max_x // 2)
+        max_y, max_x = get_canvas_size(self._canvas)
+        canvas = self._canvas.derwin(3, max_x // 2, max_y - 2, max_x // 2 + 2)
 
         n_prev_phrase_symbols = 0
         while True:
@@ -328,5 +327,5 @@ class SpaceGame:
     async def increase_year(self) -> NoReturn:
         self._current_year = MapSettings.START_YEAR
         while True:
-            await sleep(10)
+            await sleep(20)
             self._current_year += 1

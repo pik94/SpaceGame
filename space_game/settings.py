@@ -12,20 +12,21 @@ class MapSettings:
     # Should be more or equal to 0
     RUBBISH_COEFF = 0
     START_YEAR = 1950
+    PLASMA_GUN_YEAR = 2020
 
     PHRASES = {
-        1957: "First Sputnik",
-        1961: "Gagarin flew!",
-        1969: "Armstrong got on the moon!",
-        1971: "First orbital space station Salute-1",
-        1981: "Flight of the Shuttle Columbia",
-        1998: 'ISS start building',
-        2011: 'Messenger launch to Mercury',
-        2020: "Take the plasma gun! Shoot the garbage!",
+        1957:               'First Sputnik',
+        1961:               'Gagarin flew!',
+        1969:               'Armstrong got on the moon!',
+        1971:               'First orbital space station Salute-1',
+        1981:               'Flight of the Shuttle Columbia',
+        1998:               'ISS start building',
+        2011:               'Messenger launch to Mercury',
+        PLASMA_GUN_YEAR:    'Take the plasma gun! Shoot the garbage!',
     }
 
 
-class ContolSettings:
+class ControlSettings:
     SPACE_KEY_CODE = 32
     LEFT_KEY_CODE = 260
     RIGHT_KEY_CODE = 261

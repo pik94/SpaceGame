@@ -3,7 +3,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, NoReturn, Optional, Tuple, Union
 
-from space_game.settings import ContolSettings
+from space_game.settings import ControlSettings
 
 
 class Frame:
@@ -141,22 +141,39 @@ def read_controls(canvas) -> Tuple[int, int, bool]:
             # https://docs.python.org/3/library/curses.html#curses.window.getch
             break
 
-        if pressed_key_code == ContolSettings.UP_KEY_CODE:
+        if pressed_key_code == ControlSettings.UP_KEY_CODE:
             rows_direction = -1
 
-        if pressed_key_code == ContolSettings.DOWN_KEY_CODE:
+        if pressed_key_code == ControlSettings.DOWN_KEY_CODE:
             rows_direction = 1
 
-        if pressed_key_code == ContolSettings.RIGHT_KEY_CODE:
+        if pressed_key_code == ControlSettings.RIGHT_KEY_CODE:
             columns_direction = 1
 
-        if pressed_key_code == ContolSettings.LEFT_KEY_CODE:
+        if pressed_key_code == ControlSettings.LEFT_KEY_CODE:
             columns_direction = -1
 
-        if pressed_key_code == ContolSettings.SPACE_KEY_CODE:
+        if pressed_key_code == ControlSettings.SPACE_KEY_CODE:
             space_pressed = True
 
     return columns_direction, rows_direction, space_pressed
+
+
+def get_canvas_size(canvas) -> Tuple[int, int]:
+    """
+    canvas.getmaxyx() calculates a height and width of the window which are
+    more by 1 than the coordinates of the last cell.
+    This custom function returns coordinates of the last cell, i.e.
+    (window's height - 1, window's width - 1).
+    
+    However, remember, that we cannot modify this cell, because curses will 
+    raise an error (don't ask why...).
+    """
+
+    row_size, column_size = canvas.getmaxyx()
+    row_size -= 1
+    column_size -= 1
+    return row_size, column_size
 
 
 def draw_frame(canvas,
@@ -169,20 +186,20 @@ def draw_frame(canvas,
     erase text instead of drawing if negative=True is specified.
     """
 
-    max_y, max_x = canvas.getmaxyx()
+    max_y, max_x = get_canvas_size(canvas)
 
     for row, line in enumerate(frame.content.splitlines(), round(y)):
         if row <= 0:
             continue
 
-        if row >= max_y - 1:
+        if row >= max_y:
             break
 
         for column, symbol in enumerate(line, round(x)):
             if column <= 0:
                 continue
 
-            if column >= max_x - 1:
+            if column >= max_x:
                 break
 
             if symbol == ' ':
@@ -192,7 +209,7 @@ def draw_frame(canvas,
             # of the window
             # Curses will raise exception in that case. Don`t ask why…
             # https://docs.python.org/3/library/curses.html#curses.window.addch
-            if row == max_y - 1 and column == max_x - 1:
+            if row == max_y and column == max_x:
                 continue
 
             symbol = symbol if not negative else ' '
